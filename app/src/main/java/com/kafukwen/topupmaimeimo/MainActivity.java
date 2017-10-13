@@ -1,13 +1,14 @@
 package com.kafukwen.topupmaimeimo;
 
 import android.annotation.SuppressLint;
+import android.content.DialogInterface;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Message;
 import android.support.v4.widget.NestedScrollView;
+import android.support.v7.app.AlertDialog;
 import android.support.v7.app.AppCompatActivity;
 import android.view.View;
-import android.widget.Button;
 import android.widget.EditText;
 import android.widget.ScrollView;
 import android.widget.TextView;
@@ -28,18 +29,18 @@ import java.util.List;
 
 public class MainActivity extends AppCompatActivity {
 
-    private final static String GET_PROXY_HOST = "http://www.kuaidaili.com/free/inha/";
-    private final static String TEST_PROXY = "https://www.baidu.com/";
+    private final static String GET_PROXY_HOST_1 = "http://www.kuaidaili.com/free/inha/";
+    private final static String GET_PROXY_HOST_2 = "http://www.xicidaili.com/wt/"; // better
     private final static int PROXY_LIST_PAGE_NUM = 10;
 
     private EditText mShareLink;
-    private Button mTopUp;
     private TextView mLog;
-    private TextView mClear;
     private NestedScrollView mScrollView;
     private StringBuilder mLogSb = new StringBuilder();
     private List<ProxyModel> mProxyList = new ArrayList<>();
-    private List<ProxyModel> mUsefulProxyList = new ArrayList<>();
+
+    private AlertDialog.Builder mBuilder;
+    private String getProxyHost = GET_PROXY_HOST_2;
 
     @SuppressLint("HandlerLeak")
     private Handler mHandler = new Handler() {
@@ -55,25 +56,44 @@ public class MainActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+
         mShareLink = findViewById(R.id.share_link);
         mShareLink.setHint("请输入分享链接");
-        mTopUp = findViewById(R.id.top_up);
         mLog = findViewById(R.id.log);
-        mClear = findViewById(R.id.clear);
         mScrollView = findViewById(R.id.scrollView);
 
-        mTopUp.setOnClickListener(new View.OnClickListener() {
+        findViewById(R.id.top_up).setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
                 topUp(mShareLink.getText().toString());
             }
         });
 
-        mClear.setOnClickListener(new View.OnClickListener() {
+        findViewById(R.id.clear).setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
                 mLogSb.delete(0, mLogSb.length() - 1);
                 mLog.setText(mLogSb);
+            }
+        });
+
+        mBuilder = new AlertDialog.Builder(MainActivity.this)
+                .setItems(new CharSequence[]{GET_PROXY_HOST_1, GET_PROXY_HOST_2}
+                        , new DialogInterface.OnClickListener() {
+                            @Override
+                            public void onClick(DialogInterface dialogInterface, int i) {
+                                if (i == 0) {
+                                    getProxyHost = GET_PROXY_HOST_1;
+                                } else {
+                                    getProxyHost = GET_PROXY_HOST_2;
+                                }
+                            }
+                        });
+
+        findViewById(R.id.switch_proxy_pool).setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                mBuilder.create().show();
             }
         });
     }
@@ -86,8 +106,6 @@ public class MainActivity extends AppCompatActivity {
                     try {
 
                         getProxyList();
-
-                        getUsefulProxyList();
 
                         topUpAction(link);
 
@@ -104,12 +122,12 @@ public class MainActivity extends AppCompatActivity {
     private void topUpAction(String link) throws InterruptedException {
         mLogSb.append("开始请求分享连接\n");
 
-        for (int i = 0; i < mUsefulProxyList.size(); i++) {
+        for (int i = 0; i < mProxyList.size(); i++) {
 
-            if (get(link, mUsefulProxyList.get(i)) == 200) {
-                mLogSb.append("top up success! : ").append(mUsefulProxyList.get(i).toString()).append("\n");
+            if (get(link, mProxyList.get(i)) == 200) {
+                mLogSb.append("top up success! : ").append(mProxyList.get(i).toString()).append("\n");
             } else {
-                mLogSb.append("top up fail! : ").append(mUsefulProxyList.get(i).toString()).append("\n");
+                mLogSb.append("top up fail! : ").append(mProxyList.get(i).toString()).append("\n");
             }
 
             mHandler.sendEmptyMessage(200);
@@ -120,52 +138,48 @@ public class MainActivity extends AppCompatActivity {
         mLogSb.append("work done!");
     }
 
-    private void getUsefulProxyList() throws InterruptedException {
-        mLogSb.append("测试代理ip\n");
-
-        for (int i = 0; i < mProxyList.size(); i++) {
-            ProxyModel proxy = mProxyList.get(i);
-            if (get(TEST_PROXY, proxy) == 200) {
-                mLogSb.append("connect success: ").append(proxy.toString()).append("\n");
-                mUsefulProxyList.add(proxy);
-            } else {
-                mLogSb.append("connect time out: ").append(proxy.toString()).append("\n");
-            }
-
-            mHandler.sendEmptyMessage(200);
-
-            Thread.sleep(2000);
-        }
-    }
-
     private void getProxyList() throws InterruptedException {
         mLogSb.append("获取代理ip\n");
 
+        String cssQueryTag;
+        int ipColIndex;
+        int portColIndex;
+
+        if (GET_PROXY_HOST_1.equals(getProxyHost)) {
+            cssQueryTag = "tbody";
+            ipColIndex = 0;
+            portColIndex = 1;
+        } else {
+            cssQueryTag = "table";
+            ipColIndex = 1;
+            portColIndex = 2;
+        }
+
         for (int index = 1; index <= PROXY_LIST_PAGE_NUM; index++) {
-            Document doc = null;
+            Document doc;
             try {
-                doc = Jsoup.connect(GET_PROXY_HOST + index).get();
+                doc = Jsoup.connect(getProxyHost + index).get();
             } catch (IOException e) {
                 e.printStackTrace();
-                mLogSb.append("page error : ").append(GET_PROXY_HOST + index).append("\n");
+                mLogSb.append("page error : ").append(getProxyHost + index).append("\n");
                 mHandler.sendEmptyMessage(200);
                 continue;
 
             }
-            if (doc.select("tbody").size() == 0) {
-                mLogSb.append("page error : ").append(GET_PROXY_HOST + index).append("\n");
+            if (doc.select(cssQueryTag).size() == 0) {
+                mLogSb.append("page error : ").append(getProxyHost + index).append("\n");
                 mHandler.sendEmptyMessage(200);
                 continue;
             }
 
-            Element tbody = doc.select("tbody").get(0);
+            Element tbody = doc.select(cssQueryTag).get(0);
             Elements rows = tbody.select("tr");
 
             for (int i = 1; i < rows.size(); i++) {
                 Element row = rows.get(i);
                 Elements cols = row.select("td");
-                String ip = cols.get(0).text();
-                int port = Integer.parseInt(cols.get(1).text());
+                String ip = cols.get(ipColIndex).text();
+                int port = Integer.parseInt(cols.get(portColIndex).text());
                 mLogSb.append(ip).append(":").append(port).append("\n");
                 mProxyList.add(new ProxyModel(ip, port));
             }
